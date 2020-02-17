@@ -452,11 +452,12 @@ def nms(bboxes,
         scores, indices = torch.topk(scores, k=pre_max_size)
         bboxes = bboxes[indices]
     dets = torch.cat([bboxes, scores.unsqueeze(-1)], dim=1)
+    device = dets.get_device()
     dets_np = dets.data.cpu().numpy()
     if len(dets_np) == 0:
         keep = np.array([], dtype=np.int64)
     else:
-        ret = np.array(nms_gpu(dets_np, iou_threshold), dtype=np.int64)
+        ret = np.array(nms_gpu(dets_np, iou_threshold,device), dtype=np.int64)
         keep = ret[:post_max_size]
     if keep.shape[0] == 0:
         return None

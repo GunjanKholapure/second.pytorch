@@ -48,6 +48,7 @@ class DatasetWrapper(Dataset):
 
 def build(input_reader_config,
           model_config,
+          options,
           training,
           voxel_generator,
           target_assigner=None) -> DatasetWrapper:
@@ -66,7 +67,6 @@ def build(input_reader_config,
     if not isinstance(input_reader_config, input_reader_pb2.InputReader):
         raise ValueError('input_reader_config not of type '
                          'input_reader_pb2.InputReader.')
-    dataset = dataset_builder.build(input_reader_config, model_config,
-                                    training, voxel_generator, target_assigner)
+    dataset = dataset_builder.build(input_reader_config, model_config,options,training, voxel_generator, target_assigner)
     dataset = DatasetWrapper(dataset)
     return dataset

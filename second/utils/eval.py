@@ -37,7 +37,7 @@ def get_thresholds(scores: np.ndarray, num_gt, num_sample_pts=41):
 
 
 def clean_data(gt_anno, dt_anno, current_class, difficulty):
-    CLASS_NAMES = ['car', 'pedestrian', 'cyclist', 'van', 'person_sitting', 'car', 'tractor', 'trailer']
+    CLASS_NAMES = ['VEHICLE', 'PEDESTRIAN', 'cyclist', 'van', 'person_sitting', 'car', 'tractor', 'trailer']
     MIN_HEIGHT = [40, 25, 25]
     MAX_OCCLUSION = [0, 1, 2]
     MAX_TRUNCATION = [0.15, 0.3, 0.5]
@@ -56,7 +56,7 @@ def clean_data(gt_anno, dt_anno, current_class, difficulty):
         elif (current_cls_name == "Pedestrian".lower()
               and "Person_sitting".lower() == gt_name):
             valid_class = 0
-        elif (current_cls_name == "Car".lower() and "Van".lower() == gt_name):
+        elif (current_cls_name == "VEHICLE".lower() and "Van".lower() == gt_name):
             valid_class = 0
         else:
             valid_class = -1
@@ -88,7 +88,7 @@ def clean_data(gt_anno, dt_anno, current_class, difficulty):
             ignored_dt.append(0)
         else:
             ignored_dt.append(-1)
-
+    
     return num_valid_gt, ignored_gt, ignored_dt, dc_bboxes
 
 
@@ -661,12 +661,14 @@ def do_eval(gt_annos, dt_annos, current_class, min_overlaps,
 
     mAP_bbox = []
     mAP_aos = []
+    '''
     for i in range(3):  # i=difficulty
         ret = eval_class(gt_annos, dt_annos, current_class, i, 0,
                          min_overlaps[0], compute_aos)
         mAP_bbox.append(get_mAP(ret["precision"]))
         if compute_aos:
             mAP_aos.append(get_mAP(ret["orientation"]))
+    '''
     mAP_bev = []
     for i in range(3):
         ret = eval_class(gt_annos, dt_annos, current_class, i, 1,
@@ -694,13 +696,15 @@ def do_eval_v2(gt_annos,
                compute_aos=False,
                difficultys = [0, 1, 2]):
     # min_overlaps: [num_minoverlap, metric, num_class]
-    ret = eval_class_v3(gt_annos, dt_annos, current_classes, difficultys, 0,
-                        min_overlaps, compute_aos)
+    
+    ##ret = eval_class_v3(gt_annos, dt_annos, current_classes, difficultys, 0,
+    ##                    min_overlaps, compute_aos)
     # ret: [num_class, num_diff, num_minoverlap, num_sample_points]
-    mAP_bbox = get_mAP_v2(ret["precision"])
-    mAP_aos = None
-    if compute_aos:
-        mAP_aos = get_mAP_v2(ret["orientation"])
+    ##mAP_bbox = get_mAP_v2(ret["precision"])
+    ##mAP_aos = None
+    ##if compute_aos:
+    ##    mAP_aos = get_mAP_v2(ret["orientation"])
+    mAP_bbox, mAP_aos = None,None
     ret = eval_class_v3(gt_annos, dt_annos, current_classes, difficultys, 1,
                         min_overlaps)
     mAP_bev = get_mAP_v2(ret["precision"])
@@ -720,7 +724,7 @@ def do_coco_style_eval(gt_annos, dt_annos, current_classes, overlap_ranges,
     mAP_bbox, mAP_bev, mAP_3d, mAP_aos = do_eval_v2(
         gt_annos, dt_annos, current_classes, min_overlaps, compute_aos)
     # ret: [num_class, num_diff, num_minoverlap]
-    mAP_bbox = mAP_bbox.mean(-1)
+    #mAP_bbox = mAP_bbox.mean(-1)
     mAP_bev = mAP_bev.mean(-1)
     mAP_3d = mAP_3d.mean(-1)
     if mAP_aos is not None:
@@ -797,8 +801,8 @@ def get_official_eval_result(gt_annos, dt_annos, current_classes, difficultys=[0
                             [0.5, 0.25, 0.25, 0.5, 0.25, 0.5, 0.5, 0.5]])
     min_overlaps = np.stack([overlap_0_7, overlap_0_5], axis=0)  # [2, 3, 5]
     class_to_name = {
-        0: 'Car',
-        1: 'Pedestrian',
+        0: 'VEHICLE',
+        1: 'PEDESTRIAN',
         2: 'Cyclist',
         3: 'Van',
         4: 'Person_sitting',
@@ -834,19 +838,24 @@ def get_official_eval_result(gt_annos, dt_annos, current_classes, difficultys=[0
             result += print_str(
                 (f"{class_to_name[curcls]} "
                  "AP@{:.2f}, {:.2f}, {:.2f}:".format(*min_overlaps[i, :, j])))
+            
+            '''
             result += print_str((f"bbox AP:{mAPbbox[j, 0, i]:.2f}, "
                                  f"{mAPbbox[j, 1, i]:.2f}, "
                                  f"{mAPbbox[j, 2, i]:.2f}"))
-            result += print_str((f"bev  AP:{mAPbev[j, 0, i]:.2f}, "
+            '''
+            result += print_str((f"bev      AP:{mAPbev[j, 0, i]:.2f}, "
                                  f"{mAPbev[j, 1, i]:.2f}, "
                                  f"{mAPbev[j, 2, i]:.2f}"))
             result += print_str((f"3d   AP:{mAP3d[j, 0, i]:.2f}, "
                                  f"{mAP3d[j, 1, i]:.2f}, "
                                  f"{mAP3d[j, 2, i]:.2f}"))
+            '''
             if compute_aos:
                 result += print_str((f"aos  AP:{mAPaos[j, 0, i]:.2f}, "
                                      f"{mAPaos[j, 1, i]:.2f}, "
                                      f"{mAPaos[j, 2, i]:.2f}"))
+            '''
     if return_data:
         return result, mAPbbox, mAPbev, mAP3d, mAPaos
     else:
@@ -855,8 +864,8 @@ def get_official_eval_result(gt_annos, dt_annos, current_classes, difficultys=[0
 
 def get_coco_eval_result(gt_annos, dt_annos, current_classes):
     class_to_name = {
-        0: 'Car',
-        1: 'Pedestrian',
+        0: 'VEHICLE',
+        1: 'PEDESTRIAN',
         2: 'Cyclist',
         3: 'Van',
         4: 'Person_sitting',
@@ -917,17 +926,21 @@ def get_coco_eval_result(gt_annos, dt_annos, current_classes):
         result += print_str(
             (f"{class_to_name[curcls]} "
                 "coco AP@{:.2f}:{:.2f}:{:.2f}:".format(*o_range)))
+        '''
         result += print_str((f"bbox AP:{mAPbbox[j, 0]:.2f}, "
                                 f"{mAPbbox[j, 1]:.2f}, "
                                 f"{mAPbbox[j, 2]:.2f}"))
+        '''
         result += print_str((f"bev  AP:{mAPbev[j, 0]:.2f}, "
                                 f"{mAPbev[j, 1]:.2f}, "
                                 f"{mAPbev[j, 2]:.2f}"))
         result += print_str((f"3d   AP:{mAP3d[j, 0]:.2f}, "
                                 f"{mAP3d[j, 1]:.2f}, "
                                 f"{mAP3d[j, 2]:.2f}"))
+        '''
         if compute_aos:
             result += print_str((f"aos  AP:{mAPaos[j, 0]:.2f}, "
                                     f"{mAPaos[j, 1]:.2f}, "
                                     f"{mAPaos[j, 2]:.2f}"))
+        '''
     return result

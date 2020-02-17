@@ -11,6 +11,7 @@ from torch.nn import functional as F
 from second.pytorch.utils import get_paddings_indicator
 from torchplus.nn import Empty
 from torchplus.tools import change_default_args
+import numpy as np
 
 
 class PFNLayer(nn.Module):
@@ -133,7 +134,8 @@ class PillarFeatureNet(nn.Module):
         mask = get_paddings_indicator(num_voxels, voxel_count, axis=0)
         mask = torch.unsqueeze(mask, -1).type_as(features)
         features *= mask
-
+        
+        #print(features.shape,num_voxels.shape,torch.min(num_voxels),torch.max(num_voxels))
         # Forward pass through PFNLayers
         for pfn in self.pfn_layers:
             features = pfn(features)
@@ -160,15 +162,16 @@ class PointPillarsScatter(nn.Module):
         self.nx = output_shape[3]
         self.nchannels = num_input_features
 
-    def forward(self, voxel_features, coords, batch_size):
+    def forward(self, voxel_features, coords, batch_size,road_map,include_roadmap):
 
         # batch_canvas will be the final output.
         batch_canvas = []
         for batch_itt in range(batch_size):
             # Create the canvas for this sample
-            canvas = torch.zeros(self.nchannels, self.nx * self.ny, dtype=voxel_features.dtype,
+            canvas = torch.zeros(self.nchannels + int(include_roadmap), self.nx * self.ny, dtype=voxel_features.dtype,
                                  device=voxel_features.device)
-
+            #print(road_map.shape)
+            road_mask = road_map[batch_itt]
             # Only include non-empty pillars
             batch_mask = coords[:, 0] == batch_itt
             this_coords = coords[batch_mask, :]
@@ -178,8 +181,9 @@ class PointPillarsScatter(nn.Module):
             voxels = voxels.t()
 
             # Now scatter the blob back to the canvas.
-            canvas[:, indices] = voxels
-
+            canvas[:self.nchannels, indices] = voxels
+            if include_roadmap:
+                canvas[self.nchannels] = torch.from_numpy(np.reshape(road_mask,-1)).float().to('cuda')
             # Append to a list for later stacking.
             batch_canvas.append(canvas)
 
@@ -187,6 +191,7 @@ class PointPillarsScatter(nn.Module):
         batch_canvas = torch.stack(batch_canvas, 0)
 
         # Undo the column stacking to final 4-dim tensor
-        batch_canvas = batch_canvas.view(batch_size, self.nchannels, self.ny, self.nx)
+        batch_canvas = batch_canvas.view(batch_size, self.nchannels + int(include_roadmap), self.ny, self.nx)
+        #print(batch_canvas.shape)
 
         return batch_canvas

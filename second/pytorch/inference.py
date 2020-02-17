@@ -12,6 +12,7 @@ from second.pytorch.models.voxelnet import VoxelNet
 from second.pytorch.train import predict_kitti_to_anno, example_convert_to_torch
 
 
+
 class TorchInferenceContext(InferenceContext):
     def __init__(self):
         super().__init__()

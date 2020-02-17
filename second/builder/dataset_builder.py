@@ -28,10 +28,13 @@ from second.data.preprocess import prep_pointcloud
 import numpy as np
 from second.builder import dbsampler_builder
 from functools import partial
+import torch
+
 
 
 def build(input_reader_config,
           model_config,
+          info,
           training,
           voxel_generator,
           target_assigner=None):
@@ -58,8 +61,8 @@ def build(input_reader_config,
     cfg = input_reader_config
     db_sampler_cfg = input_reader_config.database_sampler
     db_sampler = None
-    if len(db_sampler_cfg.sample_groups) > 0:  # enable sample
-        db_sampler = dbsampler_builder.build(db_sampler_cfg)
+    #if len(db_sampler_cfg.sample_groups) > 0:  # enable sample
+    #    db_sampler = dbsampler_builder.build(db_sampler_cfg)
     u_db_sampler_cfg = input_reader_config.unlabeled_database_sampler
     u_db_sampler = None
     if len(u_db_sampler_cfg.sample_groups) > 0:  # enable sample
@@ -68,10 +71,17 @@ def build(input_reader_config,
     # [352, 400]
     feature_map_size = grid_size[:2] // out_size_factor
     feature_map_size = [*feature_map_size, 1][::-1]
-
+    inform = info.copy()
+    inform["road_map"] = None
+    
+    root_path = input_reader_config.kitti_root_path
+    index_list = torch.load(input_reader_config.kitti_info_path)
+    
+    inform["index_list"] = index_list
+    
     prep_func = partial(
         prep_pointcloud,
-        root_path=cfg.kitti_root_path,
+        root_path=root_path,
         class_names=list(cfg.class_names),
         voxel_generator=voxel_generator,
         target_assigner=target_assigner,
@@ -100,9 +110,11 @@ def build(input_reader_config,
         remove_environment=cfg.remove_environment,
         use_group_id=cfg.use_group_id,
         out_size_factor=out_size_factor)
+    
     dataset = KittiDataset(
-        info_path=cfg.kitti_info_path,
-        root_path=cfg.kitti_root_path,
+        info_path=inform,
+        root_path=root_path,
+        class_names=list(cfg.class_names),
         num_point_features=num_point_features,
         target_assigner=target_assigner,
         feature_map_size=feature_map_size,

@@ -127,7 +127,7 @@ def nms_postprocess(keep_out, mask_host, boxes_num):
     return num_to_keep
 
 
-def nms_gpu(dets, nms_overlap_thresh, device_id=0):
+def nms_gpu(dets, nms_overlap_thresh, device_id=1):
     """nms in gpu. 
     
     Args:
@@ -140,6 +140,7 @@ def nms_gpu(dets, nms_overlap_thresh, device_id=0):
     """
 
     boxes_num = dets.shape[0]
+    #print(boxes_num)
     keep_out = np.zeros([boxes_num], dtype=np.int32)
     scores = dets[:, 4]
     order = scores.argsort()[::-1].astype(np.int32)
@@ -151,6 +152,7 @@ def nms_gpu(dets, nms_overlap_thresh, device_id=0):
     mask_host = np.zeros((boxes_num * col_blocks, ), dtype=np.uint64)
     blockspergrid = (div_up(boxes_num, threadsPerBlock),
                      div_up(boxes_num, threadsPerBlock))
+    #print(blockspergrid)
     stream = cuda.stream()
     with stream.auto_synchronize():
         boxes_dev = cuda.to_device(boxes_host.reshape([-1]), stream)

@@ -11,7 +11,6 @@ def get_paddings_indicator(actual_num, max_num, axis=0):
     Returns:
         [type]: [description]
     """
-
     actual_num = torch.unsqueeze(actual_num, axis + 1)
     # tiled_actual_num: [N, M, 1]
     max_num_shape = [1] * len(actual_num.shape)

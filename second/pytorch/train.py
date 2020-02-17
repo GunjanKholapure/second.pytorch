@@ -1,10 +1,10 @@
+import sys
 import os
 import pathlib
 import pickle
 import shutil
 import time
 from functools import partial
-
 import fire
 import numpy as np
 import torch
@@ -21,7 +21,22 @@ from second.pytorch.builder import (box_coder_builder, input_reader_builder,
                                       second_builder)
 from second.utils.eval import get_coco_eval_result, get_official_eval_result
 from second.utils.progress_bar import ProgressBar
+from numba.errors import NumbaDeprecationWarning, NumbaWarning, NumbaPerformanceWarning
+import warnings
 
+warnings.simplefilter('ignore', category=NumbaDeprecationWarning)
+warnings.simplefilter('ignore', category=NumbaWarning)
+warnings.simplefilter('ignore', category=NumbaPerformanceWarning)
+
+import argparse
+parser = argparse.ArgumentParser(description="arg parser")
+parser.add_argument('--device', type=int, default=1, help='specify the gpu device for training')
+#parser.add_argument('--config_path', type=str, default="abc", help='specify the gpu device for training')
+#parser.add_argument('--model_dir', type=str, default="def", help='specify the gpu device for training')
+#parser.add_argument('--include_roadmap', type=bool, default=False, help='specify the gpu device for training')
+
+args,unknown = parser.parse_known_args()
+torch.cuda.set_device(args.device)
 
 def _get_pos_neg_loss(cls_loss, labels):
     # cls_loss: [N, num_anchors, num_class]
@@ -62,7 +77,7 @@ def flat_nested_json_dict(json_dict, sep=".") -> dict:
 
 def example_convert_to_torch(example, dtype=torch.float32,
                              device=None) -> dict:
-    device = device or torch.device("cuda:0")
+    device = device or torch.device("cuda:"+str(args.device))
     example_torch = {}
     float_names = [
         "voxels", "anchors", "reg_targets", "reg_weights", "bev_map", "rect",
@@ -89,7 +104,12 @@ def train(config_path,
           create_folder=False,
           display_step=50,
           summary_step=5,
-          pickle_result=True):
+          pickle_result=True,
+         include_roadmap=False,
+          dr_area = False,
+          include_roi=True,
+          include_road_points=False,
+         device=1):
     """train a VoxelNet model specified by a config file.
     """
     if create_folder:
@@ -130,9 +150,9 @@ def train(config_path,
     # BUILD NET
     ######################
     center_limit_range = model_cfg.post_center_limit_range
-    net = second_builder.build(model_cfg, voxel_generator, target_assigner)
+    net = second_builder.build(model_cfg, voxel_generator, target_assigner,include_roadmap)
     net.cuda()
-    # net_train = torch.nn.DataParallel(net).cuda()
+    #net = torch.nn.DataParallel(net).cuda()
     print("num_trainable parameters:", len(list(net.parameters())))
     # for n, p in net.named_parameters():
     #     print(n, p.shape)
@@ -165,16 +185,25 @@ def train(config_path,
     ######################
     # PREPARE INPUT
     ######################
+    options = {}
+    options["include_roadmap"] = include_roadmap
+    options["include_roi"] = include_roi
+    options["dr_area"] = dr_area
+    options["include_road_points"] = include_road_points
+    #print(options)
+    
 
     dataset = input_reader_builder.build(
         input_cfg,
         model_cfg,
+        options,
         training=True,
         voxel_generator=voxel_generator,
         target_assigner=target_assigner)
     eval_dataset = input_reader_builder.build(
         eval_input_cfg,
         model_cfg,
+        options ,
         training=False,
         voxel_generator=voxel_generator,
         target_assigner=target_assigner)
@@ -243,7 +272,6 @@ def train(config_path,
                 example_torch = example_convert_to_torch(example, float_dtype)
 
                 batch_size = example["anchors"].shape[0]
-
                 ret_dict = net(example_torch)
 
                 # box_preds = ret_dict["box_preds"]
@@ -305,7 +333,7 @@ def train(config_path,
                     metrics["num_anchors"] = int(num_anchors)
                     metrics["lr"] = float(
                         mixed_optimizer.param_groups[0]['lr'])
-                    metrics["image_idx"] = example['image_idx'][0]
+                    #metrics["image_idx"] = example['image_idx'][0]
                     flatted_metrics = flat_nested_json_dict(metrics)
                     flatted_summarys = flat_nested_json_dict(metrics, "/")
                     for k, v in flatted_summarys.items():
@@ -331,15 +359,15 @@ def train(config_path,
                     print(log_str)
                 ckpt_elasped_time = time.time() - ckpt_start_time
                 if ckpt_elasped_time > train_cfg.save_checkpoints_secs:
-                    torchplus.train.save_models(model_dir, [net, optimizer],
-                                                net.get_global_step())
+                #    torchplus.train.save_models(model_dir, [net, optimizer],
+                #                                net.get_global_step())
                     ckpt_start_time = time.time()
             total_step_elapsed += steps
             torchplus.train.save_models(model_dir, [net, optimizer],
                                         net.get_global_step())
 
             # Ensure that all evaluation points are saved forever
-            torchplus.train.save_models(eval_checkpoint_dir, [net, optimizer], net.get_global_step(), max_to_keep=100)
+            #torchplus.train.save_models(eval_checkpoint_dir, [net, optimizer], net.get_global_step(), max_to_keep=100)
 
             net.eval()
             result_path_step = result_path / f"step_{net.get_global_step()}"
@@ -381,10 +409,11 @@ def train(config_path,
                 f'generate label finished({sec_per_ex:.2f}/s). start eval:',
                 file=logf)
             gt_annos = [
-                info["annos"] for info in eval_dataset.dataset.kitti_infos
+                info for info in eval_dataset.dataset.kitti_infos
             ]
             if not pickle_result:
                 dt_annos = kitti.get_label_annos(result_path_step)
+            #print("dt_annos",dt_annos)
             result, mAPbbox, mAPbev, mAP3d, mAPaos = get_official_eval_result(gt_annos, dt_annos, class_names,
                                                                               return_data=True)
             print(result, file=logf)
@@ -394,10 +423,10 @@ def train(config_path,
             for i, class_name in enumerate(class_names):
                 writer.add_scalar('bev_ap:{}'.format(class_name), mAPbev[i, 1, 0], global_step)
                 writer.add_scalar('3d_ap:{}'.format(class_name), mAP3d[i, 1, 0], global_step)
-                writer.add_scalar('aos_ap:{}'.format(class_name), mAPaos[i, 1, 0], global_step)
+                #writer.add_scalar('aos_ap:{}'.format(class_name), mAPaos[i, 1, 0], global_step)
             writer.add_scalar('bev_map', np.mean(mAPbev[:, 1, 0]), global_step)
             writer.add_scalar('3d_map', np.mean(mAP3d[:, 1, 0]), global_step)
-            writer.add_scalar('aos_map', np.mean(mAPaos[:, 1, 0]), global_step)
+            #writer.add_scalar('aos_map', np.mean(mAPaos[:, 1, 0]), global_step)
 
             result = get_coco_eval_result(gt_annos, dt_annos, class_names)
             print(result, file=logf)
@@ -471,7 +500,7 @@ def _predict_kitti_to_file(net,
                 result_lines.append(result_line)
         else:
             result_lines = []
-        result_file = f"{result_save_path}/{kitti.get_image_index_str(img_idx)}.txt"
+        result_file = f"{result_save_path}/{img_idx}.txt"
         result_str = '\n'.join(result_lines)
         with open(result_file, 'w') as f:
             f.write(result_str)
@@ -504,17 +533,21 @@ def predict_kitti_to_anno(net,
             for box, box_lidar, bbox, score, label in zip(
                     box_preds, box_preds_lidar, box_2d_preds, scores,
                     label_preds):
+                '''
                 if not lidar_input:
                     if bbox[0] > image_shape[1] or bbox[1] > image_shape[0]:
                         continue
                     if bbox[2] < 0 or bbox[3] < 0:
                         continue
+                
                 # print(img_shape)
+                
                 if center_limit_range is not None:
                     limit_range = np.array(center_limit_range)
                     if (np.any(box_lidar[:3] < limit_range[:3])
                             or np.any(box_lidar[:3] > limit_range[3:])):
                         continue
+                '''
                 bbox[2:] = np.minimum(bbox[2:], image_shape[::-1])
                 bbox[:2] = np.maximum(bbox[:2], [0, 0])
                 anno["name"].append(class_names[int(label)])
@@ -545,7 +578,7 @@ def predict_kitti_to_anno(net,
             annos.append(kitti.empty_result_anno())
         num_example = annos[-1]["name"].shape[0]
         annos[-1]["image_idx"] = np.array(
-            [img_idx] * num_example, dtype=np.int64)
+            [img_idx] * num_example)
     return annos
 
 
@@ -555,7 +588,10 @@ def evaluate(config_path,
              predict_test=False,
              ckpt_path=None,
              ref_detfile=None,
-             pickle_result=True):
+             pickle_result=True,
+            include_roadmap=False,
+            device=1):
+    print(config_path)
     model_dir = pathlib.Path(model_dir)
     if predict_test:
         result_name = 'predict_test'
@@ -600,6 +636,7 @@ def evaluate(config_path,
     eval_dataset = input_reader_builder.build(
         input_cfg,
         model_cfg,
+        include_roadmap,
         training=False,
         voxel_generator=voxel_generator,
         target_assigner=target_assigner)
@@ -643,9 +680,10 @@ def evaluate(config_path,
     print(f"avg forward time per example: {net.avg_forward_time:.3f}")
     print(f"avg postprocess time per example: {net.avg_postprocess_time:.3f}")
     if not predict_test:
-        gt_annos = [info["annos"] for info in eval_dataset.dataset.kitti_infos]
+        gt_annos = [info for info in eval_dataset.dataset.kitti_infos]
         if not pickle_result:
             dt_annos = kitti.get_label_annos(result_path_step)
+        #print(dt_annos)
         result = get_official_eval_result(gt_annos, dt_annos, class_names)
         print(result)
         result = get_coco_eval_result(gt_annos, dt_annos, class_names)

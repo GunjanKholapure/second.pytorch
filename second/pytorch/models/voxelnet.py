@@ -3,7 +3,7 @@ from enum import Enum
 from functools import reduce
 
 import numpy as np
-import sparseconvnet as scn
+#import sparseconvnet as scn
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -188,7 +188,7 @@ class VoxelFeatureExtractorV2(nn.Module):
         voxelwise = torch.max(features, dim=1)[0]
         return voxelwise
 
-
+'''
 class SparseMiddleExtractor(nn.Module):
     def __init__(self,
                  output_shape,
@@ -258,7 +258,7 @@ class SparseMiddleExtractor(nn.Module):
         N, C, D, H, W = ret.shape
         ret = ret.view(N, C * D, H, W)
         return ret
-
+'''
 
 class ZeroPad3d(nn.ConstantPad3d):
     def __init__(self, padding):
@@ -314,6 +314,7 @@ class MiddleExtractor(nn.Module):
 
 class RPN(nn.Module):
     def __init__(self,
+                 include_roadmap,
                  use_norm=True,
                  num_class=2,
                  layer_nums=[3, 5, 5],
@@ -379,7 +380,7 @@ class RPN(nn.Module):
         self.block1 = Sequential(
             nn.ZeroPad2d(1),
             Conv2d(
-                num_input_filters, num_filters[0], 3, stride=layer_strides[0]),
+                num_input_filters + int(include_roadmap), num_filters[0], 3, stride=layer_strides[0]),
             BatchNorm2d(num_filters[0]),
             nn.ReLU(),
         )
@@ -473,6 +474,8 @@ class RPN(nn.Module):
             "box_preds": box_preds,
             "cls_preds": cls_preds,
         }
+        #if not self.training:
+        #    ret_dict["final_tensor"] = x.data().cpu()
         if self._use_direction_classifier:
             dir_cls_preds = self.conv_dir_cls(x)
             dir_cls_preds = dir_cls_preds.permute(0, 2, 3, 1).contiguous()
@@ -488,6 +491,7 @@ class LossNormType(Enum):
 
 class VoxelNet(nn.Module):
     def __init__(self,
+                 include_roadmap,
                  output_shape,
                  num_class=2,
                  num_input_features=4,
@@ -616,6 +620,7 @@ class VoxelNet(nn.Module):
         }
         rpn_class = rpn_class_dict[rpn_class_name]
         self.rpn = rpn_class(
+            include_roadmap,
             use_norm=True,
             num_class=num_class,
             layer_nums=rpn_layer_nums,
@@ -670,7 +675,7 @@ class VoxelNet(nn.Module):
             preds_dict = self.sparse_rpn(voxel_features, coors, batch_size_dev)
         else:
             spatial_features = self.middle_feature_extractor(
-                voxel_features, coors, batch_size_dev)
+                voxel_features, coors, batch_size_dev,example["road_map"],example["include_roadmap"])
             if self._use_bev:
                 preds_dict = self.rpn(spatial_features, example["bev_map"])
             else:
@@ -748,9 +753,9 @@ class VoxelNet(nn.Module):
         batch_anchors = example["anchors"].view(batch_size, -1, 7)
 
         self._total_inference_count += batch_size
-        batch_rect = example["rect"]
-        batch_Trv2c = example["Trv2c"]
-        batch_P2 = example["P2"]
+        #batch_rect = example["rect"]
+        #batch_Trv2c = example["Trv2c"]
+        #batch_P2 = example["P2"]
         if "anchors_mask" not in example:
             batch_anchors_mask = [None] * batch_size
         else:
@@ -778,9 +783,8 @@ class VoxelNet(nn.Module):
             batch_dir_preds = [None] * batch_size
 
         predictions_dicts = []
-        for box_preds, cls_preds, dir_preds, rect, Trv2c, P2, img_idx, a_mask in zip(
-                batch_box_preds, batch_cls_preds, batch_dir_preds, batch_rect,
-                batch_Trv2c, batch_P2, batch_imgidx, batch_anchors_mask
+        for box_preds, cls_preds, dir_preds,img_idx, a_mask in zip(
+                batch_box_preds, batch_cls_preds, batch_dir_preds, batch_imgidx, batch_anchors_mask
         ):
             if a_mask is not None:
                 box_preds = box_preds[a_mask]
@@ -918,6 +922,8 @@ class VoxelNet(nn.Module):
                 final_box_preds = box_preds
                 final_scores = scores
                 final_labels = label_preds
+                
+                '''
                 final_box_preds_camera = box_torch_ops.box_lidar_to_camera(
                     final_box_preds, rect, Trv2c)
                 locs = final_box_preds_camera[:, :3]
@@ -938,6 +944,15 @@ class VoxelNet(nn.Module):
                 # box_2d_preds = torch.stack([minx, miny, maxx, maxy], dim=1)
                 box_2d_preds = torch.cat([minxy, maxxy], dim=1)
                 # predictions
+                '''
+                box_2d_preds = [100,100,200,200]*final_box_preds.shape[0]
+                box_2d_preds = torch.from_numpy(np.reshape(box_2d_preds,(-1,4))).float().to('cuda')
+                final_box_preds_camera = torch.zeros(final_box_preds.shape).float().to('cuda')
+                final_box_preds_camera[:] = final_box_preds.detach()[:]
+                final_box_preds_camera[:,[0,1,2]] = final_box_preds_camera[:,[1,2,0]]
+                final_box_preds_camera[:,[0,1]] = -final_box_preds_camera[:,[0,1]] 
+                final_box_preds_camera[:,[3,4,5]] = final_box_preds_camera[:,[4,5,3]]
+                
                 predictions_dict = {
                     "bbox": box_2d_preds,
                     "box3d_camera": final_box_preds_camera,

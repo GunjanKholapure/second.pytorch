@@ -21,7 +21,7 @@ from second.pytorch.models.voxelnet import LossNormType, VoxelNet
 
 
 def build(model_cfg: second_pb2.VoxelNet, voxel_generator,
-          target_assigner) -> VoxelNet:
+          target_assigner,include_roadmap=False) -> VoxelNet:
     """build second pytorch instance.
     """
     if not isinstance(model_cfg, second_pb2.VoxelNet):
@@ -50,6 +50,7 @@ def build(model_cfg: second_pb2.VoxelNet, voxel_generator,
     direction_loss_weight = model_cfg.direction_loss_weight
 
     net = VoxelNet(
+        include_roadmap,
         dense_shape,
         num_class=num_class,
         vfe_class_name=model_cfg.voxel_feature_extractor.module_class_name,
