@@ -1,6 +1,6 @@
 For point_pillars installation refer to https://github.com/nutonomy/second.pytorch.
 
-The code has been modified to run on Argoverse 3D dataset.
+The code has been modified to run on Argoverse 3D dataset. Changes are done mainly in dataloading part in point_pillars/second/data/preprocess.py
 
 Command to train final model (in point_pillars/second/) - 
 
