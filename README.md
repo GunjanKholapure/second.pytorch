@@ -6,6 +6,10 @@ Command to train final model (in point_pillars/second/) -
 
 python ./pytorch/train.py train --config_path=./configs/pointpillars/car/xyres_20_argo_upper.proto --model_dir=./models --device=0 --include_roi=True --dr_area=False --include_road_points=False
 
+Pre-trained model can be downloaded from -
+https://drive.google.com/file/d/1ebtmoQSJdfIKVVJ93GSCdeGy-ZGqGXyN/view?usp=sharing
+
+
 For inference on test set (in point_pillars/second)- 
 
 python pp_inference.py --config_path=./configs/pointpillars/car/xyres_20_argo_upper.proto --model_dir=./models   --device=0 --model_path="path_to_model/voxelnet-xxx.tckpt" --save_path="path_to_save/xxx.pkl" --include_roi=1 --include_road_points=0 --dr_area=0
