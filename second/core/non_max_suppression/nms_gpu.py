@@ -166,7 +166,7 @@ def nms_gpu(dets, nms_overlap_thresh, device_id=1):
     return list(order[keep])
 
 
-def nms_gpu_cc(dets, nms_overlap_thresh, device_id=0):
+def nms_gpu_cc(dets, nms_overlap_thresh, device_id=1):
     boxes_num = dets.shape[0]
     keep = np.zeros(boxes_num, dtype=np.int32)
     scores = dets[:, 4]
@@ -452,7 +452,7 @@ def rotate_nms_kernel(n_boxes, nms_overlap_thresh, dev_boxes, dev_mask):
         dev_mask[cur_box_idx * col_blocks + col_start] = t
 
 
-def rotate_nms_gpu(dets, nms_overlap_thresh, device_id=0):
+def rotate_nms_gpu(dets, nms_overlap_thresh, device_id=1):
     """nms in gpu. WARNING: this function can provide right result 
     but its performance isn't be tested
     
@@ -523,7 +523,7 @@ def rotate_iou_kernel(N, K, dev_boxes, dev_query_boxes, dev_iou):
                                            block_boxes[tx * 5:tx * 5 + 5])
 
 
-def rotate_iou_gpu(boxes, query_boxes, device_id=0):
+def rotate_iou_gpu(boxes, query_boxes, device_id=1):
     """rotated box iou running in gpu. 500x faster than cpu version
     (take 5ms in one example with numba.cuda code).
     convert from [this project](
@@ -617,7 +617,7 @@ def rotate_iou_kernel_eval(N,
                                                criterion)
 
 
-def rotate_iou_gpu_eval(boxes, query_boxes, criterion=-1, device_id=0):
+def rotate_iou_gpu_eval(boxes, query_boxes, criterion=-1, device_id=1):
     """rotated box iou running in gpu. 500x faster than cpu version
     (take 5ms in one example with numba.cuda code).
     convert from [this project](
