@@ -16,5 +16,5 @@ python pp_inference.py --config_path=./configs/pointpillars/car/xyres_20_argo_up
 
 Command to get Results in AB3DMOT format( in point_pilllars/second) -
 
-python get_tracking_result.py --model_path=path_to_model --sv_dir=path_to_AB3DMOT/data/argo/car_3d_det_val_upper/ --set=val (or test)
+python get_tracking_result.py --model_path=path_to_model --sv_dir=path_to_AB3DMOT/data/argo/car_3d_det_val/ --set=val (or test)
 
